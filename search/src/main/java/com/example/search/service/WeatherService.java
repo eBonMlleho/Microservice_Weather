@@ -7,6 +7,7 @@ import java.util.Map;
 
 @Service
 public interface WeatherService {
-    List<Integer> findCityIdByName(String city);
-    Map<String, Map> findCityNameById(int id);
+    Map<String, Map> findCityDataByName(String city);
+    List<Map<String, Map>> findCityDataByNames(String city, String city2, String city3);
+    Map<String, Map> findCityDataById(int id);
 }

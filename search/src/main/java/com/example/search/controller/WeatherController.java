@@ -28,15 +28,29 @@ public class WeatherController {
         this.weatherService = weatherService;
     }
 
+    /**
+     * this is for single parameters.
+     */
+//    @GetMapping("/weather")
+//    public ResponseEntity<?> queryWeatherByCity(@RequestParam(required = true) String city) {
+//        return new ResponseEntity<>(weatherService.findCityDataByName(city), HttpStatus.OK);
+//    }
+
+    /**
+     * this is for multiple parameters
+     * test: http://192.168.0.7:8200/weather?city=london&city2=beijing&city3=shanghai
+     */
     @GetMapping("/weather")
-    public ResponseEntity<?> queryWeatherByCity(@RequestParam(required = true) String city) {
-        return new ResponseEntity<>(weatherService.findCityIdByName(city), HttpStatus.OK);
+    public ResponseEntity<?> queryWeatherByCity(@RequestParam(required = true) String city,
+                                                @RequestParam(required = false, defaultValue = "null") String city2,
+                                                @RequestParam(required = false, defaultValue = "null") String city3) {
+        return new ResponseEntity<>(weatherService.findCityDataByNames(city, city2, city3), HttpStatus.OK);
     }
 
 
     @GetMapping("/weather/{id}")
     public ResponseEntity<?> queryWeatherByCity(@PathVariable int id) {
-        return new ResponseEntity<Map>(weatherService.findCityNameById(id), HttpStatus.OK);
+        return new ResponseEntity<Map>(weatherService.findCityDataById(id), HttpStatus.OK);
     }
 
     @GetMapping("/weather/port")

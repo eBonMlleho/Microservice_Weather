@@ -2,7 +2,8 @@ package com.example.search.service;
 
 
 import com.example.search.config.EndpointConfig;
-import com.example.search.pojo.City;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cloud.client.loadbalancer.LoadBalanced;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -11,36 +12,95 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
 @Service
 public class WeatherServiceImpl implements WeatherService{
 
     private final RestTemplate restTemplate;
+    private final ExecutorService threadPool;
 
-
-    public WeatherServiceImpl(RestTemplate getRestTemplate) {
+    @Autowired
+    public WeatherServiceImpl(RestTemplate getRestTemplate, ExecutorService threadPool) {
         this.restTemplate = getRestTemplate;
+        this.threadPool = threadPool;
     }
 
+
+    /**
+     * try to achieve multiple city input
+     */
     @Override
     @Retryable(include = IllegalAccessError.class)
-    public List<Integer> findCityIdByName(String city) {
-        City[] cities = restTemplate.getForObject(EndpointConfig.queryWeatherByCity + city, City[].class);
-        List<Integer> ans = new ArrayList<>();
-        for(City c: cities) {
-            if(c != null && c.getWoeid() != null) {
-                ans.add(c.getWoeid());
-            }
-        }
+    @LoadBalanced
+    public List<Map<String, Map>> findCityDataByNames(String city, String city2, String city3) {
+        List<String> cityNames = new ArrayList<>();
+        cityNames.add(city);
+
+        if(!city2.equals("null")) {cityNames.add(city2);}
+        if(!city3.equals("null")) {cityNames.add(city3);}
+
+        /** *  use stream */
+        //return cityNames.stream().map(cityName -> findCityDataByName(cityName)).collect(Collectors.toList());
+
+        // multithreading using CompletableFuture: works well!
+        return cityNames.stream()
+                .map(cityName -> CompletableFuture.supplyAsync(()-> findCityDataByName(cityName),threadPool))
+                .map(t->t.join()).collect(Collectors.toList());
+
+
+        /** use for loop */
+//        List<CompletableFuture<Map<String, Map>>> completableFutureMaps =  new ArrayList<>();
+//        List<Map<String, Map>> res = new ArrayList();
+//        for(String name: cityNames){
+//            CompletableFuture<Map<String, Map>> future = CompletableFuture.supplyAsync(()-> findCityDataByName(name), threadPool);
+//            completableFutureMaps.add(future);
+//        }
+//
+//        CompletableFuture.allOf(completableFutureMaps.toArray(new CompletableFuture[0])).join();
+//        for(CompletableFuture<Map<String, Map>> future : completableFutureMaps){
+//            res.add((Map<String, Map>) future);
+//        }
+//        return res;
+    }
+
+
+    /**
+     * this work when we only have one city parameter
+     */
+    @Override
+    @Retryable(include = IllegalAccessError.class)
+    @LoadBalanced
+    public Map<String, Map> findCityDataByName(String city) {
+        Integer c = restTemplate.getForObject("http://192.168.0.7:8200/detail/getID?city="+city, Integer.class);
+        Map<String, Map> ans = findCityDataById(c);
         return ans;
     }
 
+
+    /**
+     * helper + testing purpose
+     */
     @Override
-    public Map<String, Map> findCityNameById(int id) {
+    public Map<String, Map> findCityDataById(int id) {
         Map<String, Map> ans = restTemplate.getForObject(EndpointConfig.queryWeatherById + id, HashMap.class);
         return ans;
     }
+
 }
+
+/** * * * * * * * * * * * * * * * * * * * ** * * * * * * ** * * * * * * ** * * * * * * **/
+/**
+ *
+ * 1. 创建一个 cached thread pool。 因为我们目前就3个 city name 最多 3 个 thread 去根据 id 拿 data
+ *  我们需要     city name --> id  可以把 id 存在 list 里面，
+ *      for i = 0 ~ i = 3
+ *          completableFuture send request
+ */
+
+
 
 
 /**
