@@ -13,6 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
@@ -30,25 +31,41 @@ public class WeatherServiceImpl implements WeatherService{
 
 
     /**
-     * try to achieve multiple city input
+     * for study purpose only: exmaple of three parameters
      */
     @Override
     @Retryable(include = IllegalAccessError.class)
-    @LoadBalanced
+//    @LoadBalanced
     public List<Map<String, Map>> findCityDataByNames(String city, String city2, String city3) {
+//        public List<Map<String, Map>> findCityDataByNames(String city, String city2, String city3) {
         List<String> cityNames = new ArrayList<>();
         cityNames.add(city);
 
         if(!city2.equals("null")) {cityNames.add(city2);}
         if(!city3.equals("null")) {cityNames.add(city3);}
 
-        /** *  use stream */
-        //return cityNames.stream().map(cityName -> findCityDataByName(cityName)).collect(Collectors.toList());
+        /** *  use stream --- can run but not really multi-threading because stream is single thread */
+//        return cityNames.stream()
+//                .map(cityName -> CompletableFuture.supplyAsync(()-> findCityDataByName(cityName),threadPool))
+//                .map(t->t.join()).collect(Collectors.toList());
 
-        // multithreading using CompletableFuture: works well!
-        return cityNames.stream()
+
+        /**  updated version  using CompletableFuture.allOf */
+        List<CompletableFuture<Map<String, Map>>> completableFutureMaps =  cityNames.stream()
                 .map(cityName -> CompletableFuture.supplyAsync(()-> findCityDataByName(cityName),threadPool))
-                .map(t->t.join()).collect(Collectors.toList());
+                .collect(Collectors.toList());
+
+        CompletableFuture.allOf(completableFutureMaps.toArray(new CompletableFuture[0])).join();
+
+        List<Map<String, Map>> res = new ArrayList();
+        for(CompletableFuture<Map<String, Map>> future : completableFutureMaps){
+            try {
+                res.add(future.get());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return res;
 
 
         /** use for loop */
@@ -67,14 +84,35 @@ public class WeatherServiceImpl implements WeatherService{
     }
 
 
-    /**
-     * this work when we only have one city parameter
-     */
+
+
+    public List<Map<String, Map>> findCityDataByNamess(List<String> cities) {
+        List<String> cityNames = new ArrayList<>();
+        cityNames.addAll(cities);
+
+        /**  updated version  using CompletableFuture.allOf */
+        List<CompletableFuture<Map<String, Map>>> completableFutureMaps =  cityNames.stream()
+                .map(cityName -> CompletableFuture.supplyAsync(()-> findCityDataByName(cityName),threadPool))
+                .collect(Collectors.toList());
+
+        CompletableFuture.allOf(completableFutureMaps.toArray(new CompletableFuture[0])).join();
+
+        List<Map<String, Map>> res = new ArrayList();
+        for(CompletableFuture<Map<String, Map>> future : completableFutureMaps){
+            try {
+                res.add(future.get());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return res;
+    }
+
     @Override
     @Retryable(include = IllegalAccessError.class)
-    @LoadBalanced
     public Map<String, Map> findCityDataByName(String city) {
         Integer c = restTemplate.getForObject("http://192.168.0.7:8200/detail/getID?city="+city, Integer.class);
+//        Integer c = restTemplate.getForObject("http://detail-service/detail/getID?city="+city, Integer.class);
         Map<String, Map> ans = findCityDataById(c);
         return ans;
     }
